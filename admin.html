@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NMMS Management Dashboard | www.tnclassroom.com</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 antialiased min-h-screen">
+
+    <div class="w-full bg-slate-900 text-white p-6 shadow-md mb-8">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-black tracking-wide">NMMS MASTER ADMIN CONSOLE</h1>
+                <p class="text-xs text-blue-400 font-bold tracking-widest uppercase">Live Student Marks & Roster Audit Tracker</p>
+            </div>
+            <div class="bg-slate-800 px-6 py-3 rounded-xl border border-slate-700 text-center">
+                <span class="block text-[9px] text-slate-400 font-black uppercase tracking-wider">Total Evaluated Records</span>
+                <span id="counter-total" class="text-2xl font-black text-green-400">0</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 mb-6">
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row gap-4">
+            <input type="text" id="adminSearchInput" onkeyup="filterTable()" class="flex-1 p-3 bg-slate-50 border-2 border-transparent focus:border-slate-800 rounded-xl font-bold outline-none text-sm" placeholder="🔍 Search by Student Name, EMIS ID, or District...">
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 pb-24">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-400 font-black tracking-wider uppercase">
+                            <th class="p-4">Submission Date</th>
+                            <th class="p-4">Student Name</th>
+                            <th class="p-4">EMIS ID (Mobile field)</th>
+                            <th class="p-4">Verification PW</th>
+                            <th class="p-4">District</th>
+                            <th class="p-4">Quiz Identity</th>
+                            <th class="p-4 text-center">Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="master-table-body" class="divide-y divide-slate-100 text-sm font-bold text-slate-700">
+                        <tr>
+                            <td colspan="7" class="p-8 text-center text-slate-400">Awaiting secure pipeline deployment stream...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBW92t7GWAf6vIHdJ83n7Nz7Io3y2GArVw",
+            authDomain: "tnclassroom-mcq-new.firebaseapp.com",
+            projectId: "tnclassroom-mcq-new",
+            storageBucket: "tnclassroom-mcq-new.firebasestorage.app",
+            messagingSenderId: "808928665241",
+            appId: "1:808928665241:web:5a8a9e3f4ee5b885c9a208"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        async function loadMasterDashboard() {
+            const tbody = document.getElementById('master-table-body');
+            try {
+                // Fetch every submitted entry ordered by time
+                const q = query(collection(db, "results"), orderBy("timestamp", "desc"));
+                const querySnapshot = await getDocs(q);
+                
+                tbody.innerHTML = '';
+                document.getElementById('counter-total').innerText = querySnapshot.size;
+
+                if(querySnapshot.empty) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400">No student submission entries logged yet.</td></tr>';
+                    return;
+                }
+
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : 'N/A';
+                    
+                    const row = document.createElement('tr');
+                    row.className = "hover:bg-slate-50 transition";
+                    row.innerHTML = `
+                        <td class="p-4 text-xs font-mono text-slate-400">${date}</td>
+                        <td class="p-4 text-slate-900 uppercase">${data.name || 'N/A'}</td>
+                        <td class="p-4 font-mono text-blue-900">${data.mobile || 'N/A'}</td>
+                        <td class="p-4 font-mono text-slate-500">${data.password || '<span class="text-slate-300">None</span>'}</td>
+                        <td class="p-4 uppercase">${data.dist || 'N/A'}</td>
+                        <td class="p-4 text-xs text-slate-500 uppercase">${data.quizId ? data.quizId.replace(/_/g, ' ') : 'N/A'}</td>
+                        <td class="p-4 text-center"><span class="px-3 py-1 bg-blue-50 text-blue-700 rounded-full font-black">${data.score}/${data.total}</span></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-red-500">Error reading data: ${e.message}</td></tr>`;
+            }
+        }
+
+        // Live filtration processing match module
+        window.filterTable = function() {
+            const input = document.getElementById("adminSearchInput").value.toUpperCase();
+            const rows = document.getElementById("master-table-body").getElementsByTagName("tr");
+
+            for (let i = 0; i < rows.length; i++) {
+                if(rows[i].cells.length < 2) continue;
+                const name = rows[i].cells[1].innerText.toUpperCase();
+                const emis = rows[i].cells[2].innerText.toUpperCase();
+                const dist = rows[i].cells[4].innerText.toUpperCase();
+                
+                if (name.includes(input) || emis.includes(input) || dist.includes(input)) {
+                    rows[i].style.display = "";
+                } else {
+                    rows[i].style.display = "none";
+                }
+            }
+        }
+
+        // Init stream execution
+        loadMasterDashboard();
+    </script>
+</body>
+</html>
