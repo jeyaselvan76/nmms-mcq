@@ -234,10 +234,10 @@
         async function startQuiz() {
             const name = document.getElementById('userName').value.trim();
             const EMIS = document.getElementById('userEmis').value.trim();
-            const pass = document.getElementById('userPassword').value.trim();
             const dist = document.getElementById('userDistrict').value;
 
-            if(!name || EMIS.length !== 10 || !pass || !dist) return alert("Details invalid. Ensure EMIS ID is exactly 10 digits.");
+            // REMOVED !pass CHECK HERE
+            if(!name || EMIS.length !== 10 || !dist) return alert("Details invalid. Ensure EMIS ID is exactly 10 digits and all fields are selected.");
 
             try {
                 // Re-verify portal state right before starting loop pipeline
@@ -254,7 +254,7 @@
 
                 if (questions.length === 0) return alert("NMMS Quiz data blank or not found.");
 
-                localStorage.setItem('tnSession', JSON.stringify({name, mobile: EMIS, password: pass, dist, qId}));
+                localStorage.setItem('tnSession', JSON.stringify({name, mobile: EMIS, dist, qId}));
 
                 const savedAnswers = localStorage.getItem('tnAnswers');
                 if (savedAnswers) {
@@ -272,7 +272,7 @@
                 document.getElementById('section-reg').classList.add('hidden');
                 document.getElementById('section-quiz').classList.remove('hidden');
                 showQuestion();
-            } catch (e) { alert("Load Error."); }
+            } catch (e) { alert("Load Error: " + e.message); }
         }
 
         function showQuestion() {
@@ -373,7 +373,6 @@
 
             const name = document.getElementById('userName').value;
             const EMIS = document.getElementById('userEmis').value;
-            const pass = document.getElementById('userPassword').value;
             const dist = document.getElementById('userDistrict').value;
             const quizId = new URLSearchParams(window.location.search).get('id') || "QUIZ";
             const subjectTitle = quizId.replace(/_/g, ' ');
@@ -425,7 +424,6 @@
                 await window.addDoc(window.collection(window.db, "results"), {
                     name,
                     mobile: EMIS,
-                    password: pass,
                     dist,
                     feedback: feedbackVal,
                     score,
