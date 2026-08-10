@@ -6,8 +6,7 @@
     <title>NMMS MCQ Portal | WWW.TNCLASSROOM.COM</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8948542276785631"
-     crossorigin="anonymous"></script>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8948542276785631" crossorigin="anonymous"></script>
     <script>
       window.MathJax = {
         tex: {
@@ -214,15 +213,55 @@
             return formatted.replace(/[\u0b80-\u0bff]+/g, (match) => `<span class="tamil-fix">${match}</span>`);
         }
 
+        // --- MODEL TEST SET RESOLVER LOGIC ---
+        function resolveQuizDetails() {
+            const rawId = new URLSearchParams(window.location.search).get('id') || "NMMS_MAT_2026";
+            
+            // Check if loading a Model Test (e.g. NMMS_SAT_MODEL_TEST_1 or contains MODEL_TEST)
+            const isModelTest = rawId.includes("MODEL_TEST");
+            
+            if (isModelTest) {
+                // If specific set is already in URL (e.g., NMMS_SAT_MODEL_TEST_1A)
+                const lastChar = rawId.slice(-1).toUpperCase();
+                if (['A', 'B', 'C', 'D'].includes(lastChar) && rawId.endsWith(lastChar)) {
+                    return {
+                        firestoreId: rawId,
+                        displayTitle: rawId.replace(/_/g, ' '),
+                        assignedSet: lastChar
+                    };
+                }
+
+                // Master URL loaded (e.g., NMMS_SAT_MODEL_TEST_1) -> Assign random Set A, B, C, or D
+                const storageKey = `nmms_assigned_set_${rawId}`;
+                let savedSet = localStorage.getItem(storageKey);
+                if (!savedSet) {
+                    const sets = ['A', 'B', 'C', 'D'];
+                    savedSet = sets[Math.floor(Math.random() * sets.length)];
+                    localStorage.setItem(storageKey, savedSet);
+                }
+
+                return {
+                    firestoreId: `${rawId}${savedSet}`,
+                    displayTitle: `${rawId.replace(/_/g, ' ')} (SET ${savedSet})`,
+                    assignedSet: savedSet
+                };
+            }
+
+            // Standard Unit Test (No Set handling required)
+            return {
+                firestoreId: rawId,
+                displayTitle: rawId.replace(/_/g, ' '),
+                assignedSet: null
+            };
+        }
+
         document.addEventListener("DOMContentLoaded", async () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const quizId = urlParams.get('id') || "NMMS_MAT_2026";
-            document.getElementById('display-subject').innerText = "NMMS: " + quizId.replace(/_/g, ' ');
+            const quizInfo = resolveQuizDetails();
+            document.getElementById('display-subject').innerText = "NMMS: " + quizInfo.displayTitle;
 
             const distSelect = document.getElementById('userDistrict');
             tnDistricts.forEach(d => distSelect.add(new Option(d, d)));
 
-            // Remote construction verification check module
             try {
                 const maintenanceSnap = await window.getDoc(window.doc(window.db, "config", "portal"));
                 if (maintenanceSnap.exists() && maintenanceSnap.data().maintenance === true) {
@@ -237,11 +276,9 @@
             const EMIS = document.getElementById('userEmis').value.trim();
             const dist = document.getElementById('userDistrict').value;
 
-            // REMOVED !pass CHECK HERE
             if(!name || EMIS.length !== 10 || !dist) return alert("Details invalid. Ensure EMIS ID is exactly 10 digits and all fields are selected.");
 
             try {
-                // Re-verify portal state right before starting loop pipeline
                 const maintenanceSnap = await window.getDoc(window.doc(window.db, "config", "portal"));
                 if (maintenanceSnap.exists() && maintenanceSnap.data().maintenance === true) {
                     alert("The assessment window has just closed.");
@@ -249,13 +286,15 @@
                     return;
                 }
 
-                const qId = new URLSearchParams(window.location.search).get('id') || "NMMS_MAT_2026";
-                const qSnap = await window.getDocs(window.query(window.collection(window.db, "quizzes", qId, "questions"), window.orderBy("qno")));
+                const quizInfo = resolveQuizDetails();
+                const targetQId = quizInfo.firestoreId;
+
+                const qSnap = await window.getDocs(window.query(window.collection(window.db, "quizzes", targetQId, "questions"), window.orderBy("qno")));
                 questions = qSnap.docs.map(doc => doc.data());
 
-                if (questions.length === 0) return alert("NMMS Quiz data blank or not found.");
+                if (questions.length === 0) return alert(`NMMS Quiz data blank or not found for collection: ${targetQId}`);
 
-                localStorage.setItem('tnSession', JSON.stringify({name, mobile: EMIS, dist, qId}));
+                localStorage.setItem('tnSession', JSON.stringify({name, mobile: EMIS, dist, qId: targetQId, assignedSet: quizInfo.assignedSet}));
 
                 const savedAnswers = localStorage.getItem('tnAnswers');
                 if (savedAnswers) {
@@ -299,7 +338,7 @@
                     <span class="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-[#0f766e] text-white rounded-full text-[10px] font-black mr-4">${labels[i]}</span>
                     <div class="flex-grow font-bold text-gray-700">${renderSafeText(opt)}</div>
                 `;
-               btn.onclick = () => {
+                btn.onclick = () => {
                     answers[currentIdx] = i;
                     skipped[currentIdx] = false;
                     localStorage.setItem('tnAnswers', JSON.stringify(answers));
@@ -375,8 +414,10 @@
             const name = document.getElementById('userName').value;
             const EMIS = document.getElementById('userEmis').value;
             const dist = document.getElementById('userDistrict').value;
-            const quizId = new URLSearchParams(window.location.search).get('id') || "QUIZ";
-            const subjectTitle = quizId.replace(/_/g, ' ');
+            
+            const quizInfo = resolveQuizDetails();
+            const quizId = quizInfo.firestoreId;
+            const subjectTitle = quizInfo.displayTitle;
 
             document.getElementById('user-details-pdf').innerHTML = `
                 <div style="margin-bottom: 8px;">
@@ -430,7 +471,8 @@
                     score,
                     total: questions.length,
                     timestamp: new Date(),
-                    quizId: quizId
+                    quizId: quizId,
+                    assignedSet: quizInfo.assignedSet || 'NONE'
                 });
 
                 localStorage.removeItem('tnAnswers');
@@ -457,7 +499,8 @@
             const h = document.getElementById('pdf-header-brand');
             const f = document.getElementById('pdf-footer-brand');
             const w = document.getElementById('pdf-watermark-main');
-            const quizId = new URLSearchParams(window.location.search).get('id') || "QUIZ";
+            const quizInfo = resolveQuizDetails();
+            const quizId = quizInfo.firestoreId;
             const userName = document.getElementById('userName').value || "Student";
 
             h.style.display = 'block'; f.style.display = 'block'; w.style.display = 'block';
