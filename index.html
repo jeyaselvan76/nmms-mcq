@@ -205,7 +205,7 @@
 
     <script>
         const tnDistricts = ["Ariyalur", "Chengalpattu", "Chennai", "Coimbatore", "Cuddalore", "Dharmapuri", "Dindigul", "Erode", "Kallakurichi", "Kancheepuram", "Kanniyakumari", "Karur", "Krishnagiri", "Madurai", "Mayiladuthurai", "Nagapattinam", "Namakkal", "Nilgiris", "Perambalur", "Pudukkottai", "Ramanathapuram", "Ranipet", "Salem", "Sivagangai", "Tenkasi", "Thanjavur", "Theni", "Thoothukudi", "Tiruchirappalli", "Tirunelveli", "Tirupathur", "Tiruppur", "Tiruvallur", "Tiruvannamalai", "Tiruvarur", "Vellore", "Viluppuram", "Virudhunagar"];
-        let questions = []; let currentIdx = 0; let answers = []; let skipped = [];
+        let questions = []; let currentIdx = 0; let answers = []; let skipped = []; let isModelTestGlobal = false;
 
         function renderSafeText(text) {
             if (!text) return "";
@@ -217,21 +217,21 @@
         function resolveQuizDetails() {
             const rawId = new URLSearchParams(window.location.search).get('id') || "NMMS_MAT_2026";
             
-            // Check if loading a Model Test (e.g. NMMS_SAT_MODEL_TEST_1 or contains MODEL_TEST)
-            const isModelTest = rawId.includes("MODEL_TEST");
+            // Detect if loading a Model Test (contains MODEL_TEST or MODEL)
+            const isModelTest = rawId.includes("MODEL_TEST") || rawId.includes("MODEL");
             
             if (isModelTest) {
-                // If specific set is already in URL (e.g., NMMS_SAT_MODEL_TEST_1A)
                 const lastChar = rawId.slice(-1).toUpperCase();
                 if (['A', 'B', 'C', 'D'].includes(lastChar) && rawId.endsWith(lastChar)) {
                     return {
                         firestoreId: rawId,
                         displayTitle: rawId.replace(/_/g, ' '),
-                        assignedSet: lastChar
+                        assignedSet: lastChar,
+                        isModelTest: true
                     };
                 }
 
-                // Master URL loaded (e.g., NMMS_SAT_MODEL_TEST_1) -> Assign random Set A, B, C, or D
+                // Assign random Set A, B, C, or D for Master URL
                 const storageKey = `nmms_assigned_set_${rawId}`;
                 let savedSet = localStorage.getItem(storageKey);
                 if (!savedSet) {
@@ -243,15 +243,17 @@
                 return {
                     firestoreId: `${rawId}${savedSet}`,
                     displayTitle: `${rawId.replace(/_/g, ' ')} (SET ${savedSet})`,
-                    assignedSet: savedSet
+                    assignedSet: savedSet,
+                    isModelTest: true
                 };
             }
 
-            // Standard Unit Test (No Set handling required)
+            // Standard Unit Test
             return {
                 firestoreId: rawId,
                 displayTitle: rawId.replace(/_/g, ' '),
-                assignedSet: null
+                assignedSet: null,
+                isModelTest: false
             };
         }
 
@@ -288,11 +290,31 @@
 
                 const quizInfo = resolveQuizDetails();
                 const targetQId = quizInfo.firestoreId;
+                isModelTestGlobal = quizInfo.isModelTest;
 
                 const qSnap = await window.getDocs(window.query(window.collection(window.db, "quizzes", targetQId, "questions"), window.orderBy("qno")));
-                questions = qSnap.docs.map(doc => doc.data());
+                let fetchedQuestions = qSnap.docs.map(doc => doc.data());
 
-                if (questions.length === 0) return alert(`NMMS Quiz data blank or not found for collection: ${targetQId}`);
+                if (fetchedQuestions.length === 0) return alert(`NMMS Quiz data blank or not found for collection: ${targetQId}`);
+
+                // --- 90 QUESTIONS SUBJECT ARRANGEMENT (MATHS 1-20 | SCIENCE 21-55 | SOCIAL 56-90) ---
+                if (isModelTestGlobal || fetchedQuestions.length === 90) {
+                    isModelTestGlobal = true; // Force Model Test status if 90 questions present
+                    
+                    const mathsQs = fetchedQuestions.filter(q => (q.subject || '').toUpperCase().includes('MATH'));
+                    const scienceQs = fetchedQuestions.filter(q => (q.subject || '').toUpperCase().includes('SCI'));
+                    const socialQs = fetchedQuestions.filter(q => (q.subject || '').toUpperCase().includes('SOC'));
+
+                    // If questions are tagged with 'subject' field in Firestore
+                    if (mathsQs.length > 0 || scienceQs.length > 0 || socialQs.length > 0) {
+                        questions = [...mathsQs, ...scienceQs, ...socialQs];
+                    } else {
+                        // If no subject field in Firestore, fallback to original fetch order
+                        questions = fetchedQuestions;
+                    }
+                } else {
+                    questions = fetchedQuestions;
+                }
 
                 localStorage.setItem('tnSession', JSON.stringify({name, mobile: EMIS, dist, qId: targetQId, assignedSet: quizInfo.assignedSet}));
 
@@ -317,7 +339,20 @@
 
         function showQuestion() {
             const q = questions[currentIdx];
-            document.getElementById('q-text').innerHTML = renderSafeText(q.question);
+            
+            // Build Subject Section Indicator for 90-mark Model Test
+            let sectionBadgeHtml = '';
+            if (isModelTestGlobal || questions.length === 90) {
+                if (currentIdx < 20) {
+                    sectionBadgeHtml = '<div class="mb-3"><span class="bg-blue-100 text-blue-800 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider">SECTION I: MATHEMATICS (Q. 1 - 20)</span></div>';
+                } else if (currentIdx < 55) {
+                    sectionBadgeHtml = '<div class="mb-3"><span class="bg-emerald-100 text-emerald-800 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider">SECTION II: SCIENCE (Q. 21 - 55)</span></div>';
+                } else {
+                    sectionBadgeHtml = '<div class="mb-3"><span class="bg-amber-100 text-amber-800 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider">SECTION III: SOCIAL SCIENCE (Q. 56 - 90)</span></div>';
+                }
+            }
+
+            document.getElementById('q-text').innerHTML = sectionBadgeHtml + renderSafeText(q.question);
             const qImg = document.getElementById('q-image');
             if(q.imageUrl && q.imageUrl.trim() !== "") {
                 qImg.src = q.imageUrl;
