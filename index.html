@@ -257,6 +257,22 @@
         let quizStartTime = null;
         let quizEndTime = null;
 
+        function escapeHTML(str) {
+            if (str === null || str === undefined) return "";
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function isValidImageUrl(url) {
+            if (!url || typeof url !== 'string') return false;
+            const clean = url.trim().toLowerCase();
+            return clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:image/');
+        }
+
         function formatTimeDisplay(totalSec) {
             const m = Math.floor(totalSec / 60);
             const s = totalSec % 60;
@@ -358,8 +374,9 @@
 
         function renderSafeText(text) {
             if (!text) return "";
-            let formatted = text.replace(/\r?\n/g, '<br>');
-            return formatted.replace(/[\u0b80-\u0bff]+/g, (match) => `<span class="tamil-fix">${match}</span>`);
+            let safe = escapeHTML(text);
+            safe = safe.replace(/\r?\n/g, '<br>');
+            return safe.replace(/[\u0b80-\u0bff]+/g, (match) => `<span class="tamil-fix">${match}</span>`);
         }
 
         // --- MODEL TEST SET RESOLVER LOGIC ---
@@ -499,8 +516,8 @@
 
             document.getElementById('q-text').innerHTML = sectionBadgeHtml + renderSafeText(q.question);
             const qImg = document.getElementById('q-image');
-            if(q.imageUrl && q.imageUrl.trim() !== "") {
-                qImg.src = q.imageUrl;
+            if(isValidImageUrl(q.imageUrl)) {
+                qImg.src = q.imageUrl.trim();
                 document.getElementById('img-container').classList.remove('hidden');
             } else {
                 document.getElementById('img-container').classList.add('hidden');
@@ -609,13 +626,19 @@
             const quizId = quizInfo.firestoreId;
             const subjectTitle = quizInfo.displayTitle;
 
+            const safeName = escapeHTML(name);
+            const safeEmis = escapeHTML(EMIS);
+            const safeDist = escapeHTML(dist);
+            const safeTitle = escapeHTML(subjectTitle);
+            const safeTimeString = escapeHTML(totalTimeString);
+
             document.getElementById('user-details-pdf').innerHTML = `
                 <div style="margin-bottom: 8px;">
-                    <p style="font-size: 14px; color: #0f766e; font-weight: 900; text-transform: uppercase; border-bottom: 1px solid #ddd; padding-bottom: 4px;">NMMS Subject: ${subjectTitle}</p>
+                    <p style="font-size: 14px; color: #0f766e; font-weight: 900; text-transform: uppercase; border-bottom: 1px solid #ddd; padding-bottom: 4px;">NMMS Subject: ${safeTitle}</p>
                 </div>
-                <p>Name: ${name} | EMIS ID: ${EMIS}</p>
-                <p>District: ${dist} | Date: ${new Date().toLocaleDateString()}</p>
-                <p style="margin-top: 4px; color: #0f766e; font-weight: 800;">Total Duration: ${totalTimeString}</p>
+                <p>Name: ${safeName} | EMIS ID: ${safeEmis}</p>
+                <p>District: ${safeDist} | Date: ${new Date().toLocaleDateString()}</p>
+                <p style="margin-top: 4px; color: #0f766e; font-weight: 800;">Total Duration: ${safeTimeString}</p>
             `;
 
             let score = 0;
@@ -683,7 +706,7 @@
 
                 const totalTimeEl = document.getElementById('display-total-time');
                 if (totalTimeEl) {
-                    totalTimeEl.innerText = `⏱ Total Time Taken: ${totalTimeString}`;
+                    totalTimeEl.innerText = `⏱ Total Time Taken: ${safeTimeString}`;
                 }
 
                 document.getElementById('section-feedback').classList.add('hidden');
