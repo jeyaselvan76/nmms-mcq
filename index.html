@@ -47,7 +47,7 @@
         #pdf-content { background: white !important; }
         #pdf-header-brand, #pdf-footer-brand { display: none; }
 
-        #pdf-header-brand, #display-score, #user-details-pdf {
+        #pdf-header-brand, #display-score, #user-details-pdf, #badge-container {
             page-break-after: avoid;
             break-after: avoid;
         }
@@ -79,6 +79,33 @@
             line-height: 1.6;
             word-wrap: break-word;
         }
+
+        /* Celebration Badge Custom Animations */
+        @keyframes badgePop {
+            0% { transform: scale(0.65); opacity: 0; }
+            65% { transform: scale(1.06); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes iconBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-7px) scale(1.08); }
+        }
+
+        @keyframes spinSlow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes softPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.03); opacity: 0.92; }
+        }
+
+        .anim-badge-card { animation: badgePop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+        .anim-trophy { animation: iconBounce 1.6s ease-in-out infinite; }
+        .anim-star { display: inline-block; animation: spinSlow 5s linear infinite; }
+        .anim-pulse-badge { animation: softPulse 2s ease-in-out infinite; }
     </style>
 </head>
 <body class="antialiased min-h-screen">
@@ -101,7 +128,7 @@
                 <div class="space-y-4">
                     <input type="text" id="userName" class="w-full p-4 bg-slate-50 border-0 rounded-2xl outline-none font-bold text-slate-700 placeholder-slate-400" placeholder="Student Name">
                     <input type="text" id="userEmis" maxlength="10" class="w-full p-4 bg-slate-50 border-0 rounded-2xl outline-none font-bold text-slate-700 placeholder-slate-400" placeholder="Enter EMIS ID/Mobile No">
-                    
+
                     <select id="userDistrict" class="w-full p-4 bg-slate-50 border-0 rounded-2xl outline-none font-bold text-slate-600 appearance-none">
                         <option value="">Select District</option>
                     </select>
@@ -121,6 +148,16 @@
         </div>
 
         <div class="max-w-4xl mx-auto space-y-6">
+            <!-- TIMER SECTION -->
+            <div class="flex justify-between items-center px-3 py-2 bg-slate-50/80 rounded-2xl border border-slate-200">
+                <span class="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-teal-600 animate-ping"></span> Question Time
+                </span>
+                <span id="question-timer-badge" class="px-5 py-2 rounded-2xl text-base sm:text-lg font-mono font-black tracking-widest uppercase transition-all shadow-md bg-emerald-50 text-emerald-800 border-2 border-emerald-400">
+                    ⏱ 00:00
+                </span>
+            </div>
+
             <div class="bg-teal-50 rounded-[2.5rem] p-6 md:p-10 border border-teal-100">
                 <div id="img-container" class="hidden mb-4 text-center"><img id="q-image" src="" class="max-h-64 mx-auto rounded-2xl shadow-sm bg-white"></div>
                 <h2 id="q-text" class="text-lg md:text-xl font-bold text-gray-800 leading-relaxed"></h2>
@@ -168,11 +205,19 @@
                     <p class="text-[10px] font-black text-teal-900 uppercase">NMMS MCQ PORTAL — www.tnclassroom.com</p>
                 </div>
                 <div id="pdf-watermark-main">NMMS MCQ PORTAL</div>
+
                 <div class="text-center mb-6">
+                    <!-- ANIMATED GRAPHIC BADGE CONTAINER -->
+                    <div id="badge-container" class="mb-4 flex flex-col items-center justify-center"></div>
+
                     <h2 class="text-6xl font-black text-teal-700 mb-2" id="display-score">0/0</h2>
                     <p class="text-sm font-bold text-slate-400 uppercase tracking-widest">NMMS Assessment Completed</p>
+                    <div id="display-total-time" class="inline-block mt-3 px-5 py-2 rounded-2xl bg-slate-100 text-slate-800 border border-slate-200 font-mono font-black text-sm">
+                        ⏱ Total Time Taken: 00m 00s
+                    </div>
                     <div id="user-details-pdf" class="mt-4 text-slate-700 font-bold text-sm bg-slate-50 p-4 rounded-xl border border-slate-200"></div>
                 </div>
+
                 <h3 class="font-black text-slate-800 mb-4 uppercase text-sm border-b pb-2">Correction Sheet</h3>
                 <div id="correction-list" class="space-y-6 mb-10"></div>
                 <div id="pdf-footer-brand" class="text-center border-t border-slate-200 pt-2 mt-8">
@@ -207,6 +252,110 @@
         const tnDistricts = ["Ariyalur", "Chengalpattu", "Chennai", "Coimbatore", "Cuddalore", "Dharmapuri", "Dindigul", "Erode", "Kallakurichi", "Kancheepuram", "Kanniyakumari", "Karur", "Krishnagiri", "Madurai", "Mayiladuthurai", "Nagapattinam", "Namakkal", "Nilgiris", "Perambalur", "Pudukkottai", "Ramanathapuram", "Ranipet", "Salem", "Sivagangai", "Tenkasi", "Thanjavur", "Theni", "Thoothukudi", "Tiruchirappalli", "Tirunelveli", "Tirupathur", "Tiruppur", "Tiruvallur", "Tiruvannamalai", "Tiruvarur", "Vellore", "Viluppuram", "Virudhunagar"];
         let questions = []; let currentIdx = 0; let answers = []; let skipped = []; let isModelTestGlobal = false;
 
+        let questionTimes = [];
+        let timerInterval = null;
+        let quizStartTime = null;
+        let quizEndTime = null;
+
+        function formatTimeDisplay(totalSec) {
+            const m = Math.floor(totalSec / 60);
+            const s = totalSec % 60;
+            return `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
+        }
+
+        function formatTotalTimeReadable(totalSec) {
+            const m = Math.floor(totalSec / 60);
+            const s = totalSec % 60;
+            if (m === 0) return `${s}s`;
+            return `${m}m ${s < 10 ? '0' + s : s}s`;
+        }
+
+        function startQuestionTimer() {
+            clearInterval(timerInterval);
+            const badge = document.getElementById('question-timer-badge');
+
+            function updateDisplay() {
+                const sec = questionTimes[currentIdx];
+                if (badge) {
+                    badge.innerText = `⏱ ${formatTimeDisplay(sec)}`;
+                    if (sec <= 60) {
+                        badge.className = "px-5 py-2 rounded-2xl text-base sm:text-lg font-mono font-black tracking-widest uppercase transition-all shadow-md bg-emerald-50 text-emerald-800 border-2 border-emerald-400";
+                    } else {
+                        badge.className = "px-5 py-2 rounded-2xl text-base sm:text-lg font-mono font-black tracking-widest uppercase transition-all shadow-md bg-red-50 text-red-600 border-2 border-red-500 animate-pulse";
+                    }
+                }
+            }
+
+            updateDisplay();
+
+            timerInterval = setInterval(() => {
+                questionTimes[currentIdx]++;
+                updateDisplay();
+            }, 1000);
+        }
+
+        function stopQuestionTimer() {
+            clearInterval(timerInterval);
+        }
+
+        function getCongratsBadgeHtml(pct) {
+            if (pct >= 75) {
+                return `
+                    <div class="anim-badge-card inline-flex flex-col items-center p-6 bg-gradient-to-b from-amber-50 via-yellow-50 to-amber-100 border-2 border-amber-300 rounded-3xl shadow-xl max-w-sm w-full mx-auto relative overflow-hidden">
+                        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 text-white flex items-center justify-center text-3xl shadow-lg mb-3 anim-trophy">
+                            🏆
+                        </div>
+                        <span class="px-3.5 py-1 rounded-full bg-amber-500 text-white text-[10px] font-black tracking-widest uppercase mb-1.5 shadow-sm">
+                            GOLD TIER • ${pct.toFixed(0)}%
+                        </span>
+                        <h4 class="text-lg font-black text-amber-950 flex items-center gap-1.5 leading-tight">
+                            Outstanding Achievement! <span class="anim-star">⭐</span>
+                        </h4>
+                        <p class="text-xs font-bold text-amber-800 mt-1 tamil-fix">அருமையான செயல்திறன்! நீங்கள் NMMS தேர்வில் முழு வெற்றி பெற தகுதியுடையவர்!</p>
+                    </div>
+                `;
+            } else if (pct >= 50) {
+                return `
+                    <div class="anim-badge-card inline-flex flex-col items-center p-6 bg-gradient-to-b from-teal-50 via-emerald-50 to-teal-100 border-2 border-teal-300 rounded-3xl shadow-xl max-w-sm w-full mx-auto">
+                        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-600 text-white flex items-center justify-center text-3xl shadow-lg mb-3 anim-pulse-badge">
+                            🥈
+                        </div>
+                        <span class="px-3.5 py-1 rounded-full bg-teal-600 text-white text-[10px] font-black tracking-widest uppercase mb-1.5 shadow-sm">
+                            SILVER TIER • ${pct.toFixed(0)}%
+                        </span>
+                        <h4 class="text-lg font-black text-teal-950 leading-tight">Good Effort! Keep Pushing! 🎯</h4>
+                        <p class="text-xs font-bold text-teal-800 mt-1 tamil-fix">சிறப்பான முயற்சி! மேலும் பயிற்சி செய்து 75% மதிப்பெண்ணை எட்டுங்கள்!</p>
+                    </div>
+                `;
+            } else if (pct >= 25) {
+                return `
+                    <div class="anim-badge-card inline-flex flex-col items-center p-6 bg-gradient-to-b from-blue-50 via-indigo-50 to-blue-100 border-2 border-indigo-200 rounded-3xl shadow-lg max-w-sm w-full mx-auto">
+                        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white flex items-center justify-center text-3xl shadow-md mb-3 anim-trophy">
+                            🥉
+                        </div>
+                        <span class="px-3.5 py-1 rounded-full bg-indigo-600 text-white text-[10px] font-black tracking-widest uppercase mb-1.5 shadow-sm">
+                            BRONZE TIER • ${pct.toFixed(0)}%
+                        </span>
+                        <h4 class="text-lg font-black text-indigo-950 leading-tight">Nice Start! Practice More! 🚀</h4>
+                        <p class="text-xs font-bold text-indigo-800 mt-1 tamil-fix">நல்ல தொடக்கம்! தவறான விடைகளை திருத்தி மீண்டும் பயிற்சி செய்யுங்கள்!</p>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="anim-badge-card inline-flex flex-col items-center p-5 bg-gradient-to-b from-slate-50 to-slate-100 border-2 border-slate-200 rounded-3xl shadow-sm max-w-sm w-full mx-auto">
+                        <div class="w-14 h-14 rounded-2xl bg-slate-300 text-slate-700 flex items-center justify-center text-2xl mb-2">
+                            📖
+                        </div>
+                        <span class="px-3 py-0.5 rounded-full bg-slate-400 text-white text-[10px] font-black tracking-widest uppercase mb-1">
+                            PRACTICE NEEDED • ${pct.toFixed(0)}%
+                        </span>
+                        <h4 class="text-base font-black text-slate-800">Revision Recommended</h4>
+                        <p class="text-xs font-medium text-slate-600 mt-1 tamil-fix">பாடக் குறிப்புகளை மீண்டும் படித்துவிட்டு மாதிரித் தேர்வை எழுதுங்கள்!</p>
+                    </div>
+                `;
+            }
+        }
+
         function renderSafeText(text) {
             if (!text) return "";
             let formatted = text.replace(/\r?\n/g, '<br>');
@@ -216,10 +365,9 @@
         // --- MODEL TEST SET RESOLVER LOGIC ---
         function resolveQuizDetails() {
             const rawId = new URLSearchParams(window.location.search).get('id') || "NMMS_MAT_2026";
-            
-            // Detect if loading a Model Test (contains MODEL_TEST or MODEL)
+
             const isModelTest = rawId.includes("MODEL_TEST") || rawId.includes("MODEL");
-            
+
             if (isModelTest) {
                 const lastChar = rawId.slice(-1).toUpperCase();
                 if (['A', 'B', 'C', 'D'].includes(lastChar) && rawId.endsWith(lastChar)) {
@@ -231,7 +379,6 @@
                     };
                 }
 
-                // Assign random Set A, B, C, or D for Master URL
                 const storageKey = `nmms_assigned_set_${rawId}`;
                 let savedSet = localStorage.getItem(storageKey);
                 if (!savedSet) {
@@ -248,7 +395,6 @@
                 };
             }
 
-            // Standard Unit Test
             return {
                 firestoreId: rawId,
                 displayTitle: rawId.replace(/_/g, ' '),
@@ -297,19 +443,16 @@
 
                 if (fetchedQuestions.length === 0) return alert(`NMMS Quiz data blank or not found for collection: ${targetQId}`);
 
-                // --- 90 QUESTIONS SUBJECT ARRANGEMENT (MATHS 1-20 | SCIENCE 21-55 | SOCIAL 56-90) ---
                 if (isModelTestGlobal || fetchedQuestions.length === 90) {
-                    isModelTestGlobal = true; // Force Model Test status if 90 questions present
-                    
+                    isModelTestGlobal = true;
+
                     const mathsQs = fetchedQuestions.filter(q => (q.subject || '').toUpperCase().includes('MATH'));
                     const scienceQs = fetchedQuestions.filter(q => (q.subject || '').toUpperCase().includes('SCI'));
                     const socialQs = fetchedQuestions.filter(q => (q.subject || '').toUpperCase().includes('SOC'));
 
-                    // If questions are tagged with 'subject' field in Firestore
                     if (mathsQs.length > 0 || scienceQs.length > 0 || socialQs.length > 0) {
                         questions = [...mathsQs, ...scienceQs, ...socialQs];
                     } else {
-                        // If no subject field in Firestore, fallback to original fetch order
                         questions = fetchedQuestions;
                     }
                 } else {
@@ -331,6 +474,9 @@
                 }
 
                 skipped = new Array(questions.length).fill(false);
+                questionTimes = new Array(questions.length).fill(0);
+                quizStartTime = Date.now();
+
                 document.getElementById('section-reg').classList.add('hidden');
                 document.getElementById('section-quiz').classList.remove('hidden');
                 showQuestion();
@@ -339,8 +485,7 @@
 
         function showQuestion() {
             const q = questions[currentIdx];
-            
-            // Build Subject Section Indicator for 90-mark Model Test
+
             let sectionBadgeHtml = '';
             if (isModelTestGlobal || questions.length === 90) {
                 if (currentIdx < 20) {
@@ -383,6 +528,7 @@
             });
             document.getElementById('btn-main').innerText = (currentIdx === questions.length - 1) ? "Preview" : "Next";
             updatePalette();
+            startQuestionTimer();
             if (window.MathJax && window.MathJax.typesetPromise) {
                 window.MathJax.typesetPromise([document.getElementById('section-quiz')]);
             }
@@ -420,6 +566,7 @@
         }
 
         function showPreview() {
+            stopQuestionTimer();
             document.getElementById('section-quiz').classList.add('hidden');
             document.getElementById('section-preview').classList.remove('hidden');
             const summary = document.getElementById('summary-list'); summary.innerHTML = '';
@@ -442,6 +589,14 @@
         function goToFeedback() { document.getElementById('section-preview').classList.add('hidden'); document.getElementById('section-feedback').classList.remove('hidden'); }
 
         async function finalSubmitDirect() {
+            stopQuestionTimer();
+            if (!quizEndTime) {
+                quizEndTime = Date.now();
+            }
+
+            const totalSecondsSpent = Math.max(0, Math.floor((quizEndTime - (quizStartTime || quizEndTime)) / 1000));
+            const totalTimeString = formatTotalTimeReadable(totalSecondsSpent);
+
             const btn = document.getElementById('final-confirm-btn');
             btn.disabled = true;
             btn.innerText = "SUBMITTING...";
@@ -449,7 +604,7 @@
             const name = document.getElementById('userName').value;
             const EMIS = document.getElementById('userEmis').value;
             const dist = document.getElementById('userDistrict').value;
-            
+
             const quizInfo = resolveQuizDetails();
             const quizId = quizInfo.firestoreId;
             const subjectTitle = quizInfo.displayTitle;
@@ -460,6 +615,7 @@
                 </div>
                 <p>Name: ${name} | EMIS ID: ${EMIS}</p>
                 <p>District: ${dist} | Date: ${new Date().toLocaleDateString()}</p>
+                <p style="margin-top: 4px; color: #0f766e; font-weight: 800;">Total Duration: ${totalTimeString}</p>
             `;
 
             let score = 0;
@@ -505,6 +661,9 @@
                     feedback: feedbackVal,
                     score,
                     total: questions.length,
+                    percentage: (score / questions.length) * 100,
+                    totalTimeSeconds: totalSecondsSpent,
+                    totalTimeString: totalTimeString,
                     timestamp: new Date(),
                     quizId: quizId,
                     assignedSet: quizInfo.assignedSet || 'NONE'
@@ -514,6 +673,19 @@
                 localStorage.removeItem('tnSession');
 
                 document.getElementById('display-score').innerText = `${score}/${questions.length}`;
+
+                // INJECT GRAPHIC BADGE WITH ANIMATIONS
+                const scorePercentage = (score / questions.length) * 100;
+                const badgeBox = document.getElementById('badge-container');
+                if (badgeBox) {
+                    badgeBox.innerHTML = getCongratsBadgeHtml(scorePercentage);
+                }
+
+                const totalTimeEl = document.getElementById('display-total-time');
+                if (totalTimeEl) {
+                    totalTimeEl.innerText = `⏱ Total Time Taken: ${totalTimeString}`;
+                }
+
                 document.getElementById('section-feedback').classList.add('hidden');
                 document.getElementById('section-success').classList.remove('hidden');
 
