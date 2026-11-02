@@ -159,7 +159,9 @@
             </div>
 
             <div class="bg-teal-50 rounded-[2.5rem] p-6 md:p-10 border border-teal-100">
-                <div id="img-container" class="hidden mb-4 text-center"><img id="q-image" src="" class="max-h-64 mx-auto rounded-2xl shadow-sm bg-white"></div>
+                <div id="img-container" class="hidden mb-4 text-center">
+                    <img id="q-image" src="" alt="Question Diagram" referrerpolicy="no-referrer" loading="eager" class="max-h-64 mx-auto rounded-2xl shadow-sm bg-white object-contain">
+                </div>
                 <h2 id="q-text" class="text-lg md:text-xl font-bold text-gray-800 leading-relaxed"></h2>
             </div>
             <div id="options-list" class="space-y-3"></div>
@@ -271,6 +273,24 @@
             if (!url || typeof url !== 'string') return false;
             const clean = url.trim().toLowerCase();
             return clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:image/');
+        }
+
+        // Resolves lh3.googleusercontent.com and standard drive links to the direct thumbnail CDN
+        function formatQuestionImageUrl(url) {
+            if (!url || typeof url !== 'string') return "";
+            url = url.trim();
+
+            const lh3Match = url.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
+            if (lh3Match && lh3Match[1]) {
+                return `https://drive.google.com/thumbnail?id=${lh3Match[1]}&sz=w1000`;
+            }
+
+            const driveMatch = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            if (driveMatch && driveMatch[1]) {
+                return `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w1000`;
+            }
+
+            return url;
         }
 
         function formatTimeDisplay(totalSec) {
@@ -515,12 +535,32 @@
             }
 
             document.getElementById('q-text').innerHTML = sectionBadgeHtml + renderSafeText(q.question);
+            
+            // Image Resolver & Retry logic
             const qImg = document.getElementById('q-image');
-            if(isValidImageUrl(q.imageUrl)) {
-                qImg.src = q.imageUrl.trim();
-                document.getElementById('img-container').classList.remove('hidden');
+            const imgContainer = document.getElementById('img-container');
+
+            if (isValidImageUrl(q.imageUrl)) {
+                const directCdnUrl = formatQuestionImageUrl(q.imageUrl);
+                
+                // Set fallback handler in case a particular endpoint times out
+                qImg.onerror = function() {
+                    if (!this.dataset.retryAttempted) {
+                        this.dataset.retryAttempted = "true";
+                        const driveMatch = q.imageUrl.match(/id=([a-zA-Z0-9_-]+)/) || q.imageUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                        if (driveMatch && driveMatch[1]) {
+                            this.src = `https://drive.google.com/uc?export=view&id=${driveMatch[1]}`;
+                            return;
+                        }
+                    }
+                    console.warn("Unable to load question figure:", q.imageUrl);
+                };
+
+                delete qImg.dataset.retryAttempted;
+                qImg.src = directCdnUrl;
+                imgContainer.classList.remove('hidden');
             } else {
-                document.getElementById('img-container').classList.add('hidden');
+                imgContainer.classList.add('hidden');
             }
 
             const list = document.getElementById('options-list');
